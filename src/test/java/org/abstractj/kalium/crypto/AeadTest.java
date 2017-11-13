@@ -35,7 +35,6 @@ public class AeadTest {
 
     @Test
     public void testAES256GCM() throws Exception {
-        sodium().sodium_init();
         if (sodium().crypto_aead_aes256gcm_is_available() != 1) {
             System.out.println("AES256-GCM is not supported");
             return;

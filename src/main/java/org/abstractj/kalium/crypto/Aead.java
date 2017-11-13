@@ -16,8 +16,6 @@ public class Aead {
         this.key = key;
         // both CHACHAPOLY and AESGCM use 32 byte keys
         checkLength(key, CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES);
-        sodium().sodium_init(); // needs to be called here for aes256gcm_is_available() to work
-
     }
 
     public Aead(String key, Encoder encoder) {

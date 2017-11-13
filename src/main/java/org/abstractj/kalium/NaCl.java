@@ -23,13 +23,10 @@ import jnr.ffi.annotations.Out;
 import jnr.ffi.byref.LongLongByReference;
 import jnr.ffi.types.u_int64_t;
 
-public class NaCl {
+public enum NaCl {
+    ; // utility class
 
-    public static Sodium sodium() {
-        Sodium sodium = SingletonHolder.SODIUM_INSTANCE;
-        checkVersion(sodium);
-        return sodium;
-    }
+    private static final int[] MIN_SUPPORTED_VERSION = {1, 0, 3};
 
     private static final String LIBRARY_NAME = libraryName();
 
@@ -42,37 +39,41 @@ public class NaCl {
         }
     }
 
-    private static final class SingletonHolder {
-        public static final Sodium SODIUM_INSTANCE =
-                LibraryLoader.create(Sodium.class)
-                        .search("/usr/local/lib")
-                        .search("/opt/local/lib")
-                        .search("lib")
-                        .load(LIBRARY_NAME);
-
+    /*
+     * This is a Java synchronized wrapper around libsodium's init function.
+     * LibSodium's init function is not thread-safe.
+     *
+     * Check libsodium's documentation for more info.
+     */
+    static {
+        int success = sodium().sodium_init();
+        if (success != 0)
+            System.out.println("sodium_init returned " + success);
     }
 
-    public static final Integer[] MIN_SUPPORTED_VERSION =
-            new Integer[] { 1, 0, 3 };
+    public static Sodium sodium() {
+        return SingletonHolder.SODIUM_INSTANCE;
+    }
 
-    private static boolean versionSupported = false;
-
-    private static final void checkVersion(Sodium lib) {
-        if (!versionSupported) {
-            String[] version = lib.sodium_version_string().split("\\.");
-            versionSupported = version.length >= 3 &&
-                MIN_SUPPORTED_VERSION[0] <= new Integer(version[0]) &&
-                MIN_SUPPORTED_VERSION[1] <= new Integer(version[1]) &&
-                MIN_SUPPORTED_VERSION[2] <= new Integer(version[2]);
-        }
+    private static void checkVersion(Sodium lib) {
+        System.out.println("Version: " + lib.sodium_version_string());
+        String[] version = lib.sodium_version_string()
+                .replaceAll("[^\\d]+", ".") // added to avoid a corruption in the version.
+                .split("\\.");
+        int ver0 = Integer.parseInt(version[0]);
+        int ver1 = version.length <= 1 ? 0 : Integer.parseInt(version[1]);
+        int ver2 = version.length <= 2 ? 0 : Integer.parseInt(version[2]);
+        boolean versionSupported =
+                MIN_SUPPORTED_VERSION[0] < ver0 ||
+                        (MIN_SUPPORTED_VERSION[0] == ver0 &&
+                                MIN_SUPPORTED_VERSION[1] < ver1 || (
+                                MIN_SUPPORTED_VERSION[1] == ver1 &&
+                                        MIN_SUPPORTED_VERSION[2] <= ver2));
         if (!versionSupported) {
             String message = String.format("Unsupported libsodium version: %s. Please update",
-                                        lib.sodium_version_string());
+                    lib.sodium_version_string());
             throw new UnsupportedOperationException(message);
         }
-    }
-
-    private NaCl() {
     }
 
     public interface Sodium {
@@ -80,7 +81,7 @@ public class NaCl {
         /**
          * This function isn't thread safe. Be sure to call it once, and before
          * performing other operations.
-         *
+         * <p>
          * Check libsodium's documentation for more info.
          */
         int sodium_init();
@@ -382,7 +383,7 @@ public class NaCl {
 
         /**
          * @return 1 if the current CPU supports the AES256-GCM implementation,
-         *         and 0 if it doesn't.
+         * and 0 if it doesn't.
          */
         int crypto_aead_aes256gcm_is_available();
 
@@ -486,13 +487,17 @@ public class NaCl {
 
     }
 
-    /**
-     * This is a Java synchronized wrapper around libsodium's init function.
-     * LibSodium's init function is not thread-safe.
-     *
-     * Check libsodium's documentation for more info.
-     */
-    public static synchronized int init() {
-        return sodium().sodium_init();
+    private static final class SingletonHolder {
+        static final Sodium SODIUM_INSTANCE;
+
+        static {
+            Sodium sodium = LibraryLoader.create(Sodium.class)
+                    .search("/usr/local/lib")
+                    .search("/opt/local/lib")
+                    .search("lib")
+                    .load(LIBRARY_NAME);
+            checkVersion(sodium);
+            SODIUM_INSTANCE = sodium;
+        }
     }
 }
